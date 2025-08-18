@@ -20,6 +20,7 @@ type Job struct {
 	Image string `orm:"column(image)"`
 	Code  string `orm:"column(code)"`
 	Runs  []*Run `orm:"reverse(many)"`
+	Token string `orm:"column(token)"`
 }
 
 func (j *Job) CommandToExecute(ctx *context.Context) []string {
@@ -50,27 +51,31 @@ type Run struct {
 }
 
 func RunJob(ctx *context.Context) {
+
 	name := ctx.Input.Param(":name")
 	fmt.Println("attempting to run " + name)
-
 	var job Job
 	o := orm.NewOrm()
 	o.QueryTable((*Job)(nil)).Filter("name", name).One(&job)
 
-	startTime := time.Now()
-	cmdArgs := job.CommandToExecute(ctx)
-	cmd := exec.Command("docker", append([]string{"run", "--rm", job.Image}, cmdArgs...)...)
-	fmt.Println(cmd.Args)
-	output, err := cmd.Output()
-	if err != nil {
-		log.Fatalf("Befehlsausführung fehlgeschlagen: %v", err)
-	}
+	if ctx.Request.Header.Get("token") == job.Token {
+		startTime := time.Now()
+		cmdArgs := job.CommandToExecute(ctx)
+		cmd := exec.Command("docker", append([]string{"run", "--rm", job.Image}, cmdArgs...)...)
+		fmt.Println(cmd.Args)
+		output, err := cmd.Output()
+		if err != nil {
+			log.Fatalf("Befehlsausführung fehlgeschlagen: %v", err)
+		}
 
-	ctx.WriteString(string(output))
-	run := new(Run)
-	run.Job = &job
-	run.DateTime = time.Now().Format("2006-01-02 15:04:05")
-	run.TimeElapsed = time.Since(startTime).Milliseconds()
-	o.Insert(run)
-	fmt.Println("done in " + strconv.FormatInt(time.Since(startTime).Milliseconds(), 10) + " ms")
+		ctx.WriteString(string(output))
+		run := new(Run)
+		run.Job = &job
+		run.DateTime = time.Now().Format("2006-01-02 15:04:05")
+		run.TimeElapsed = time.Since(startTime).Milliseconds()
+		o.Insert(run)
+		fmt.Println("done in " + strconv.FormatInt(time.Since(startTime).Milliseconds(), 10) + " ms")
+	} else {
+		fmt.Println("wrong token!")
+	}
 }
