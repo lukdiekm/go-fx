@@ -20,5 +20,5 @@ func init() {
 func main() {
 	orm.RunSyncdb("default", false, false)
 	web.Get("/run/:name", resources.RunJob)
-	web.Run("127.0.0.1:8080")
+	web.Run("0.0.0.0:8080")
 }
