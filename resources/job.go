@@ -42,7 +42,7 @@ func (job *Job) RenderTemplate(ctx *context.Context) string {
 		fmt.Println(err)
 	}
 	tmplData := templates.TemplateData{Code: job.Code, Header: string(header), Query: string(query)}
-	tmpl, err := template.ParseFiles("templates/" + job.Image + ".tmpl")
+	tmpl, err := template.Must(template.New("php").Parse("<?php class Request {     public $headers;     public $query; } {{.Code}} $request = new Request(); $request->headers = json_decode('{{.Header}}'); $request->query = json_encode('{{.Query}}'); echo main($request);")).ParseFiles("templates/" + job.Image + ".tmpl")
 	if err != nil {
 		log.Fatalf("Fehler beim Laden des Templates: %v", err)
 	}
