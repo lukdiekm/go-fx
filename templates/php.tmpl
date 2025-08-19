@@ -1,0 +1,14 @@
+<?php
+
+class Request
+{
+    public $headers;
+    public $query;
+}
+
+{{.Code}}
+
+$request = new Request();
+$request->headers = json_decode('{{.Header}}');
+$request->query = json_encode('{{.Query}}');
+echo main($request);

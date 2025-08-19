@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"go-fx/resources"
 	"os"
 
@@ -13,7 +12,6 @@ import (
 func init() {
 	orm.RegisterModel(new(resources.Job))
 	orm.RegisterModel(new(resources.Run))
-	fmt.Println("teeest" + os.Getenv("MYSQL_URL"))
 	orm.RegisterDataBase("default", "mysql", os.Getenv("MYSQL_URL"))
 }
 

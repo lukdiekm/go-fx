@@ -1,9 +1,14 @@
 package resources
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"go-fx/templates"
+	"html"
+	"html/template"
 	"log"
+	"os"
 	"os/exec"
 	_ "os/exec"
 	"strconv"
@@ -23,31 +28,29 @@ type Job struct {
 	Token string `orm:"column(token)"`
 }
 
-func (j *Job) CommandToExecute(ctx *context.Context) []string {
-	switch j.Image {
-	case "php":
-		return []string{"php", "-r", j.Hydrate(ctx)}
-	case "node":
-		return []string{"node", "-e", j.Code}
-	}
-
-	return []string{}
-}
-
-func (j *Job) Hydrate(ctx *context.Context) string {
-	header, err := json.Marshal(ctx.Request.Header)
-	query, err := json.Marshal(ctx.Input.Params())
-	if err != nil {
-		fmt.Println(err)
-	}
-	return "class Request{public $headers;public $query;}" + j.Code + "$request = new Request();$request->headers = json_decode('" + string(header) + "');$request->query = json_encode('" + string(query) + "'); echo main($request);"
-}
-
 type Run struct {
 	ID          int    `orm:"auto"`
 	Job         *Job   `orm:"rel(fk)"`
 	DateTime    string `orm:"column(datetime)"`
 	TimeElapsed int64  `orm:"column(time_elapsed)"`
+}
+
+func (job *Job) RenderTemplate(ctx *context.Context) string {
+	header, err := json.Marshal(ctx.Request.Header)
+	query, err := json.Marshal(ctx.Input.Params())
+	if err != nil {
+		fmt.Println(err)
+	}
+	tmplData := templates.TemplateData{Code: job.Code, Header: string(header), Query: string(query)}
+	tmpl, err := template.ParseFiles("templates/" + job.Image + ".tmpl")
+	if err != nil {
+		log.Fatalf("Fehler beim Laden des Templates: %v", err)
+	}
+	var result bytes.Buffer
+	err = tmpl.Execute(&result, tmplData)
+	filename := time.Now().UnixNano()
+	os.WriteFile(strconv.FormatInt(filename, 10), []byte(html.UnescapeString(string(result.Bytes()))), 0777)
+	return strconv.FormatInt(filename, 10)
 }
 
 func RunJob(ctx *context.Context) {
@@ -60,14 +63,17 @@ func RunJob(ctx *context.Context) {
 
 	if ctx.Request.Header.Get("token") == job.Token {
 		startTime := time.Now()
-		cmdArgs := job.CommandToExecute(ctx)
-		cmd := exec.Command("docker", append([]string{"run", "--rm", job.Image}, cmdArgs...)...)
+
+		codefile := job.RenderTemplate(ctx)
+
+		cmd := exec.Command("docker", []string{"run", "--rm", "-v", "./" + codefile + ":/code", job.Image, "php", "/code"}...)
 		fmt.Println(cmd.Args)
 		output, err := cmd.Output()
 		if err != nil {
-			log.Fatalf("Befehlsausführung fehlgeschlagen: %v", err)
+			fmt.Println(string(output))
+			log.Fatalf("Befehlsausführung fehlgeschlagen: %v", err.Error())
 		}
-
+		os.Remove(codefile)
 		ctx.WriteString(string(output))
 		run := new(Run)
 		run.Job = &job
